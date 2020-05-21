@@ -1,5 +1,5 @@
 import requests
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from .models import City
 from .forms import CityForm
 
@@ -9,9 +9,33 @@ def index(request):
     # city = 'London'
     # print(r.text)
 
+    err_msg = ''
+    message = ''
+    message_class = ''
+
     if request.method == 'POST':
         form = CityForm(request.POST)
-        form.save()
+
+        if form.is_valid():
+            new_city = form.cleaned_data['name']
+            existing_city_count = City.objects.filter(name=new_city).count()
+
+            if existing_city_count == 0:
+                r = requests.get(url.format(new_city)).json()
+    
+                if r['cod'] == 200:
+                    form.save()
+                else:
+                    err_msg = "There's no such city in the world!"
+            else:
+                err_msg = 'City already exists in database!'
+        
+        if err_msg:
+            message = err_msg
+            message_class = 'is-danger'
+        else:
+            message = 'City added succesfully'
+            message_class = 'is-success'
 
     form = CityForm()
 
@@ -24,7 +48,7 @@ def index(request):
         r = requests.get(url.format(city)).json()
 
         city_weather = {
-            'city': city.name.title(),
+            'city': city.name,
             'temperature': r['main']['temp'],
             'description': r['weather'][0]['description'],
             'icon': r['weather'][0]['icon'],
@@ -34,5 +58,14 @@ def index(request):
     
     # print(weather_data)
 
-    context = {'weather_data': weather_data, 'form': form}
+    context = {
+        'weather_data': weather_data,
+        'form': form,
+        'message': message,
+        'message_class': message_class,
+        }
     return render(request, 'weather/weather.html', context)
+
+def delete_city(request, city_name):
+    City.objects.get(name=city_name).delete()
+    return redirect('/')
